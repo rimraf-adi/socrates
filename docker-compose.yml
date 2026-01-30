@@ -1,19 +1,26 @@
 services:
   searxng:
-    image: localhost/searxng/searxng:latest
+    image: searxng/searxng:latest
     container_name: socrates-searxng
     ports:
       - "8080:8080"
     volumes:
-      - ./searxng/searx/settings.yml:/etc/searxng/settings.yml:ro
+      - ./searxng:/etc/searxng:rw
     environment:
-      - SEARXNG_BASE_URL=http://localhost:8080
-    depends_on:
-      - redis
+      - SEARXNG_BASE_URL=http://localhost:8080/
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: redis:alpine
     container_name: socrates-redis
+    ports:
+      - "6379:6379"
     restart: unless-stopped
-    command: redis-server --save "" --appendonly no
+
+# NOTE: Backend and Frontend are run separately for development:
+#
+# Backend (terminal 1):
+#   cd backend && pip install -r requirements.txt && python -m uvicorn app.main:app --reload
+#
+# Frontend (terminal 2):
+#   cd frontend && npm run dev

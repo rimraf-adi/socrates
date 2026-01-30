@@ -1,0 +1,109 @@
+"""Deep research endpoint with SSE streaming."""
+
+import json
+import asyncio
+from fastapi import APIRouter, Query
+from sse_starlette.sse import EventSourceResponse
+from pydantic import BaseModel
+from typing import List, AsyncGenerator
+
+from app.agents.researcher import run_research
+from app.tools.searxng import SearchResult
+
+
+router = APIRouter()
+
+
+class ResearchResponse(BaseModel):
+    """Final response from deep research."""
+    answer: str
+    sources: List[dict]
+    sub_questions: List[str]
+    iterations: int
+
+
+async def research_event_generator(query: str) -> AsyncGenerator[str, None]:
+    """Generate SSE events for research progress."""
+    
+    progress_queue = asyncio.Queue()
+    
+    async def on_progress(event: dict):
+        await progress_queue.put(event)
+    
+    # Start research in background
+    async def run():
+        try:
+            result = await run_research(query, on_progress)
+            await progress_queue.put({"type": "complete", "data": result})
+        except Exception as e:
+            await progress_queue.put({"type": "error", "message": str(e)})
+    
+    task = asyncio.create_task(run())
+    
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(progress_queue.get(), timeout=60.0)
+                
+                if event.get("type") == "complete":
+                    # Send final result
+                    data = event["data"]
+                    yield json.dumps({
+                        "type": "complete",
+                        "answer": data.get("final_answer", ""),
+                        "sources": data.get("search_results", []),
+                        "sub_questions": data.get("sub_questions", []),
+                        "iterations": data.get("iteration", 0),
+                    })
+                    break
+                elif event.get("type") == "error":
+                    yield json.dumps({
+                        "type": "error",
+                        "message": event.get("message", "Unknown error"),
+                    })
+                    break
+                else:
+                    # Progress update
+                    yield json.dumps({
+                        "type": "progress",
+                        "node": event.get("node", ""),
+                        "status": event.get("status", ""),
+                        "message": event.get("message", ""),
+                        "sub_questions": event.get("sub_questions", []),
+                        "iteration": event.get("iteration", 0),
+                    })
+            except asyncio.TimeoutError:
+                yield json.dumps({"type": "ping"})
+    finally:
+        task.cancel()
+
+
+@router.get("/research")
+async def deep_research(q: str = Query(..., description="Research query")):
+    """
+    Deep research with LangGraph agent.
+    
+    Returns Server-Sent Events (SSE) stream with:
+    - Progress updates as the agent works
+    - Final comprehensive answer
+    """
+    return EventSourceResponse(
+        research_event_generator(q),
+        media_type="text/event-stream",
+    )
+
+
+@router.get("/research/sync", response_model=ResearchResponse)
+async def deep_research_sync(q: str = Query(..., description="Research query")):
+    """
+    Deep research without streaming (for testing).
+    Waits for full result before returning.
+    """
+    result = await run_research(q)
+    
+    return ResearchResponse(
+        answer=result.get("final_answer", ""),
+        sources=result.get("search_results", []),
+        sub_questions=result.get("sub_questions", []),
+        iterations=result.get("iteration", 0),
+    )
