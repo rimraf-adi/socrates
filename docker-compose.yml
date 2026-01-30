@@ -1,0 +1,19 @@
+services:
+  searxng:
+    image: localhost/searxng/searxng:latest
+    container_name: socrates-searxng
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./searxng/searx/settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: socrates-redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no
