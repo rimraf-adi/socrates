@@ -1,6 +1,6 @@
 services:
   searxng:
-    image: searxng/searxng:latest
+    image: sha256:78e326bb94f0b4e6e9475b5abffe49f68a952e7cc094c24d6998a886447f2d1c
     container_name: socrates-searxng
     ports:
       - "8080:8080"
@@ -9,18 +9,17 @@ services:
     environment:
       - SEARXNG_BASE_URL=http://localhost:8080/
     restart: unless-stopped
+  # redis:
+  #   image: redis:alpine
+  #   container_name: socrates-redis
+  #   ports:
+  #     - "6379:6379"
+  #   restart: unless-stopped
 
-  redis:
-    image: redis:alpine
-    container_name: socrates-redis
-    ports:
-      - "6379:6379"
-    restart: unless-stopped
-
-# NOTE: Backend and Frontend are run separately for development:
-#
-# Backend (terminal 1):
-#   cd backend && pip install -r requirements.txt && python -m uvicorn app.main:app --reload
-#
-# Frontend (terminal 2):
-#   cd frontend && npm run dev
+  # NOTE: Backend and Frontend are run separately for development:
+  #
+  # Backend (terminal 1):
+  #   cd backend && uv sync && uv run uvicorn app.main:app --reload
+  #
+  # Frontend (terminal 2):
+  #   cd frontend && npm run dev

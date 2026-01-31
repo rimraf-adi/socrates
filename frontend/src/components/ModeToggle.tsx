@@ -8,24 +8,24 @@ interface ModeToggleProps {
 export default function ModeToggle({ mode, onModeChange }: ModeToggleProps) {
     return (
         <div className="flex justify-center">
-            <div className="inline-flex bg-gray-800/50 border border-gray-700 rounded-lg p-1">
+            <div className="inline-flex glass-panel p-1">
                 <button
                     onClick={() => onModeChange("simple")}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${mode === "simple"
-                            ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg"
-                            : "text-gray-400 hover:text-white"
+                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${mode === "simple"
+                        ? "bg-[var(--accent)] text-white"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                         }`}
                 >
-                    ⚡ Simple Search
+                    simple search
                 </button>
                 <button
                     onClick={() => onModeChange("deep")}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${mode === "deep"
-                            ? "bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg"
-                            : "text-gray-400 hover:text-white"
+                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${mode === "deep"
+                        ? "bg-[var(--accent)] text-white"
+                        : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                         }`}
                 >
-                    🔬 Deep Research
+                    deep research
                 </button>
             </div>
         </div>

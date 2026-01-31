@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import SearchBar from "@/components/SearchBar";
 import ModeToggle from "@/components/ModeToggle";
 import ResultsPane from "@/components/ResultsPane";
 import AgentProgress from "@/components/AgentProgress";
+import ThemeControls from "@/components/ThemeControls";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -47,7 +48,6 @@ export default function Home() {
 
       try {
         if (mode === "simple") {
-          // Simple search - REST API
           const response = await fetch(
             `${API_URL}/api/search?q=${encodeURIComponent(query)}`
           );
@@ -60,7 +60,6 @@ export default function Home() {
           setAnswer(data.answer);
           setSources(data.sources);
         } else {
-          // Deep research - SSE streaming
           const eventSource = new EventSource(
             `${API_URL}/api/research?q=${encodeURIComponent(query)}`
           );
@@ -108,18 +107,20 @@ export default function Home() {
   );
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-950 to-gray-900 text-white">
-      <div className="max-w-4xl mx-auto px-4 py-12">
+    <main className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] transition-colors duration-300">
+      <div className="max-w-3xl mx-auto px-6 py-16">
         {/* Header */}
-        <header className="text-center mb-12">
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent mb-2">
-            Socrates
+        <header className="text-center mb-14">
+          <h1 className="text-4xl font-medium tracking-tight text-[var(--text-primary)] mb-2">
+            socrates
           </h1>
-          <p className="text-gray-400">Open-Source AI Research Assistant</p>
+          <p className="text-sm text-[var(--text-muted)] tracking-wide">
+            open-source ai research assistant
+          </p>
         </header>
 
         {/* Search Controls */}
-        <div className="space-y-6 mb-8">
+        <div className="space-y-5 mb-10">
           <ModeToggle mode={mode} onModeChange={setMode} />
           <SearchBar onSearch={handleSearch} isLoading={isLoading} />
         </div>
@@ -139,10 +140,13 @@ export default function Home() {
         />
 
         {/* Footer */}
-        <footer className="text-center text-gray-500 text-sm mt-12">
-          Powered by LangGraph + Groq + SearXNG
+        <footer className="text-center text-[var(--text-muted)] text-xs mt-16 tracking-wide">
+          langgraph + groq + searxng
         </footer>
       </div>
+
+      {/* Theme Controls */}
+      <ThemeControls />
     </main>
   );
 }

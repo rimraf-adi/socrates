@@ -19,25 +19,25 @@ export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
 
     return (
         <form onSubmit={handleSubmit} className="w-full">
-            <div className="flex bg-gray-800/50 border border-gray-700 rounded-xl overflow-hidden focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
+            <div className="flex glass-panel overflow-hidden focus-within:border-[var(--accent)] transition-colors">
                 <input
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Ask anything..."
-                    className="flex-1 px-6 py-4 bg-transparent text-white placeholder-gray-500 focus:outline-none text-lg"
+                    placeholder="ask anything..."
+                    className="flex-1 px-5 py-3.5 bg-transparent text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none text-sm"
                     disabled={isLoading}
                 />
                 <button
                     type="submit"
                     disabled={isLoading || !query.trim()}
-                    className="px-6 bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                    className="px-5 bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                     {isLoading ? (
-                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
                         <svg
-                            className="w-6 h-6"
+                            className="w-4 h-4"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
