@@ -16,7 +16,15 @@ LMSTUDIO_BASE_URL = "http://127.0.0.1:1234/v1"
 
 # Global settings that can be changed at runtime
 _current_model: str | None = None
-_current_provider: str = "lmstudio"  # "lmstudio" or "gemini"
+_current_provider: str = "lmstudio"  # "lmstudio", "gemini", or "hybrid"
+
+# Depth presets: maps depth name to max_iterations
+DEPTH_PRESETS = {
+    "quick": 5,
+    "standard": 10,
+    "deep": 15,
+    "exhaustive": 20,
+}
 
 
 def set_current_model(model: str | None):
@@ -26,9 +34,31 @@ def set_current_model(model: str | None):
 
 
 def set_current_provider(provider: str):
-    """Set the current provider (lmstudio or gemini)."""
+    """Set the current provider (lmstudio, gemini, or hybrid)."""
     global _current_provider
     _current_provider = provider
+
+
+def _get_lmstudio_llm(temperature: float = 0.4, model: str | None = None):
+    """Get LMStudio LLM."""
+    kwargs = {
+        "base_url": LMSTUDIO_BASE_URL,
+        "api_key": "lm-studio",
+        "temperature": temperature,
+    }
+    if model:
+        kwargs["model"] = model
+    return ChatOpenAI(**kwargs)
+
+
+def _get_gemini_llm(temperature: float = 0.4, model: str | None = None):
+    """Get Gemini LLM."""
+    gemini_model = model or "gemini-2.5-flash"
+    return ChatGoogleGenerativeAI(
+        model=gemini_model,
+        google_api_key=os.getenv("GEMINI_API_KEY"),
+        temperature=temperature,
+    )
 
 
 def get_llm(temperature: float = 0.4, model: str | None = None, provider: str | None = None):
@@ -37,23 +67,26 @@ def get_llm(temperature: float = 0.4, model: str | None = None, provider: str | 
     provider_to_use = provider or _current_provider
     
     if provider_to_use == "gemini":
-        # Use Gemini
-        gemini_model = model_to_use or "gemini-2.5-flash"
-        return ChatGoogleGenerativeAI(
-            model=gemini_model,
-            google_api_key=os.getenv("GEMINI_API_KEY"),
-            temperature=temperature,
-        )
+        return _get_gemini_llm(temperature, model_to_use)
     else:
-        # Use LMStudio (default)
-        kwargs = {
-            "base_url": LMSTUDIO_BASE_URL,
-            "api_key": "lm-studio",
-            "temperature": temperature,
-        }
-        if model_to_use:
-            kwargs["model"] = model_to_use
-        return ChatOpenAI(**kwargs)
+        # LMStudio (default, also used as fallback for hybrid light tasks)
+        return _get_lmstudio_llm(temperature, model_to_use)
+
+
+def get_llm_light(temperature: float = 0.4):
+    """Get LLM for lightweight tasks (query analysis, sub-questions, evaluation).
+    In hybrid mode: uses LMStudio. Otherwise: uses the current provider."""
+    if _current_provider == "hybrid":
+        return _get_lmstudio_llm(temperature, _current_model)
+    return get_llm(temperature)
+
+
+def get_llm_heavy(temperature: float = 0.4):
+    """Get LLM for heavy tasks (synthesis, complex analysis).
+    In hybrid mode: uses Gemini. Otherwise: uses the current provider."""
+    if _current_provider == "hybrid":
+        return _get_gemini_llm(temperature)
+    return get_llm(temperature)
 
 
 class ResearchState(TypedDict):
@@ -416,7 +449,7 @@ IMPORTANT GUIDELINES:
 
 async def analyze_and_plan(state: ResearchState) -> ResearchState:
     """Analyze query and create dynamic research plan."""
-    llm = get_llm(temperature=0.3)
+    llm = get_llm_light(temperature=0.3)
     
     prompt = QUERY_ANALYSIS_PROMPT.format(query=state["query"])
     response = await llm.ainvoke(prompt)
@@ -492,7 +525,7 @@ async def search_web(state: ResearchState) -> ResearchState:
 
 async def analyze_results(state: ResearchState) -> ResearchState:
     """Answer each subquery within context and store the answer."""
-    llm = get_llm(temperature=0.3)
+    llm = get_llm_heavy(temperature=0.3)
     idx = state["current_question_idx"]
     current_q = state["sub_questions"][idx]
     
@@ -533,7 +566,7 @@ async def analyze_results(state: ResearchState) -> ResearchState:
 
 async def synthesize_answer(state: ResearchState) -> ResearchState:
     """Synthesize final answer by summarizing all subquery answers."""
-    llm = get_llm(temperature=0.5)
+    llm = get_llm_heavy(temperature=0.5)
     
     # Build a structured summary of all subquery answers
     subquery_summaries = []
@@ -619,7 +652,7 @@ def should_continue_research(state: ResearchState) -> Literal["search", "evaluat
 async def evaluate_coverage(state: ResearchState) -> ResearchState:
     """Dynamically evaluate if more research is needed (for deep mode)."""
     import json
-    llm = get_llm(temperature=0.3)
+    llm = get_llm_light(temperature=0.3)
     
     # Summarize findings for evaluation
     findings_summary = "\n".join([
@@ -722,17 +755,36 @@ def create_research_graph():
 research_graph = create_research_graph()
 
 
-async def run_research(query: str, on_progress=None, model: str | None = None, provider: str = "lmstudio"):
-    """Run the research agent with progress callbacks."""
+async def run_research(
+    query: str, 
+    on_progress=None, 
+    model: str | None = None, 
+    provider: str = "lmstudio",
+    depth: str = "standard",
+    max_iterations: int | None = None
+):
+    """Run the research agent with progress callbacks.
+    
+    Args:
+        query: The research query
+        on_progress: Callback for progress updates
+        model: Optional model ID
+        provider: Provider selection (lmstudio, gemini, or hybrid)
+        depth: Research depth (quick, standard, deep, exhaustive)
+        max_iterations: Override for max iterations (uses depth preset if not specified)
+    """
     # Set the model and provider for this research session
     if model:
         set_current_model(model)
     set_current_provider(provider)
     
+    # Determine max_iterations from depth preset or override
+    iterations = max_iterations if max_iterations else DEPTH_PRESETS.get(depth, 10)
+    
     initial_state: ResearchState = {
         "query": query,
         "query_type": "exploratory",
-        "research_depth": "standard",
+        "research_depth": depth,
         "sub_questions": [],
         "current_question_idx": 0,
         "search_results": [],
@@ -741,7 +793,7 @@ async def run_research(query: str, on_progress=None, model: str | None = None, p
         "knowledge_gaps": [],
         "final_answer": "",
         "iteration": 0,
-        "max_iterations": 15,
+        "max_iterations": iterations,
         "status": "starting",
         "coverage_score": 0,
         "follow_up_queries": [],
@@ -763,3 +815,4 @@ async def run_research(query: str, on_progress=None, model: str | None = None, p
     
     final_state = await research_graph.ainvoke(initial_state)
     return final_state
+

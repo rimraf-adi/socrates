@@ -22,7 +22,13 @@ class ResearchResponse(BaseModel):
     iterations: int
 
 
-async def research_event_generator(query: str, model: Optional[str] = None, provider: str = "lmstudio") -> AsyncGenerator[str, None]:
+async def research_event_generator(
+    query: str, 
+    model: Optional[str] = None, 
+    provider: str = "lmstudio",
+    depth: str = "standard",
+    max_iterations: Optional[int] = None
+) -> AsyncGenerator[str, None]:
     """Generate SSE events for research progress."""
     
     progress_queue = asyncio.Queue()
@@ -33,7 +39,14 @@ async def research_event_generator(query: str, model: Optional[str] = None, prov
     # Start research in background
     async def run():
         try:
-            result = await run_research(query, on_progress, model=model, provider=provider)
+            result = await run_research(
+                query, 
+                on_progress, 
+                model=model, 
+                provider=provider,
+                depth=depth,
+                max_iterations=max_iterations
+            )
             await progress_queue.put({"type": "complete", "data": result})
         except Exception as e:
             await progress_queue.put({"type": "error", "message": str(e)})
@@ -81,8 +94,10 @@ async def research_event_generator(query: str, model: Optional[str] = None, prov
 @router.get("/research")
 async def deep_research(
     q: str = Query(..., description="Research query"),
-    model: Optional[str] = Query(None, description="LMStudio model to use"),
-    provider: str = Query("lmstudio", description="Provider: lmstudio or gemini")
+    model: Optional[str] = Query(None, description="Model ID"),
+    provider: str = Query("lmstudio", description="Provider: lmstudio, gemini, or hybrid"),
+    depth: str = Query("standard", description="Depth: quick, standard, deep, exhaustive"),
+    max_iterations: Optional[int] = Query(None, description="Override max iterations (5-20)")
 ):
     """
     Deep research with LangGraph agent.
@@ -92,7 +107,7 @@ async def deep_research(
     - Final comprehensive answer
     """
     return EventSourceResponse(
-        research_event_generator(q, model=model, provider=provider),
+        research_event_generator(q, model=model, provider=provider, depth=depth, max_iterations=max_iterations),
         media_type="text/event-stream",
     )
 
@@ -100,14 +115,16 @@ async def deep_research(
 @router.get("/research/sync", response_model=ResearchResponse)
 async def deep_research_sync(
     q: str = Query(..., description="Research query"),
-    model: Optional[str] = Query(None, description="LMStudio model to use"),
-    provider: str = Query("lmstudio", description="Provider: lmstudio or gemini")
+    model: Optional[str] = Query(None, description="Model ID"),
+    provider: str = Query("lmstudio", description="Provider: lmstudio, gemini, or hybrid"),
+    depth: str = Query("standard", description="Depth: quick, standard, deep, exhaustive"),
+    max_iterations: Optional[int] = Query(None, description="Override max iterations (5-20)")
 ):
     """
     Deep research without streaming (for testing).
     Waits for full result before returning.
     """
-    result = await run_research(q, model=model, provider=provider)
+    result = await run_research(q, model=model, provider=provider, depth=depth, max_iterations=max_iterations)
     
     return ResearchResponse(
         answer=result.get("final_answer", ""),
@@ -115,4 +132,5 @@ async def deep_research_sync(
         sub_questions=result.get("sub_questions", []),
         iterations=result.get("iteration", 0),
     )
+
 

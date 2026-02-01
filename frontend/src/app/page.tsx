@@ -5,6 +5,7 @@ import SearchBar from "@/components/SearchBar";
 import ModeToggle from "@/components/ModeToggle";
 import ModelSelector from "@/components/ModelSelector";
 import ProviderSelector from "@/components/ProviderSelector";
+import ResearchSettings from "@/components/ResearchSettings";
 import ResultsPane from "@/components/ResultsPane";
 import AgentProgress from "@/components/AgentProgress";
 import ThemeControls from "@/components/ThemeControls";
@@ -30,8 +31,10 @@ interface ProgressEvent {
 
 export default function Home() {
   const [mode, setMode] = useState<"simple" | "deep">("simple");
-  const [provider, setProvider] = useState<"lmstudio" | "gemini">("gemini");
+  const [provider, setProvider] = useState<"lmstudio" | "gemini" | "hybrid">("hybrid");
   const [selectedModel, setSelectedModel] = useState("");
+  const [depth, setDepth] = useState<"quick" | "standard" | "deep" | "exhaustive">("standard");
+  const [maxIterations, setMaxIterations] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [answer, setAnswer] = useState("");
   const [sources, setSources] = useState<SearchResult[]>([]);
@@ -52,6 +55,8 @@ export default function Home() {
 
       const modelParam = selectedModel ? `&model=${encodeURIComponent(selectedModel)}` : "";
       const providerParam = `&provider=${provider}`;
+      const depthParam = `&depth=${depth}`;
+      const iterationsParam = maxIterations ? `&max_iterations=${maxIterations}` : "";
 
       try {
         if (mode === "simple") {
@@ -68,7 +73,7 @@ export default function Home() {
           setSources(data.sources);
         } else {
           const eventSource = new EventSource(
-            `${API_URL}/api/research?q=${encodeURIComponent(query)}${modelParam}${providerParam}`
+            `${API_URL}/api/research?q=${encodeURIComponent(query)}${modelParam}${providerParam}${depthParam}${iterationsParam}`
           );
 
           eventSource.onmessage = (event) => {
@@ -110,7 +115,7 @@ export default function Home() {
         }
       }
     },
-    [mode, selectedModel, provider]
+    [mode, selectedModel, provider, depth, maxIterations]
   );
 
   return (
@@ -136,6 +141,14 @@ export default function Home() {
             <div className="flex justify-center">
               <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
             </div>
+          )}
+          {mode === "deep" && (
+            <ResearchSettings
+              depth={depth}
+              maxIterations={maxIterations}
+              onDepthChange={setDepth}
+              onMaxIterationsChange={setMaxIterations}
+            />
           )}
           <SearchBar onSearch={handleSearch} isLoading={isLoading} />
         </div>
@@ -165,4 +178,5 @@ export default function Home() {
     </main>
   );
 }
+
 

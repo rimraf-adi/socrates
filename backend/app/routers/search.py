@@ -180,8 +180,10 @@ GUIDELINES:
 
 
 def get_llm_for_search(model: Optional[str], provider: str, temperature: float = 0.4):
-    """Get the appropriate LLM based on provider."""
-    if provider == "gemini":
+    """Get the appropriate LLM based on provider.
+    For simple search, hybrid mode uses Gemini since synthesis is the heavy task."""
+    if provider in ("gemini", "hybrid"):
+        # Gemini or Hybrid (synthesis is heavy, so use Gemini)
         gemini_model = model or "gemini-2.5-flash"
         return ChatGoogleGenerativeAI(
             model=gemini_model,
@@ -200,7 +202,7 @@ def get_llm_for_search(model: Optional[str], provider: str, temperature: float =
 async def simple_search(
     q: str = Query(..., description="Search query"),
     model: Optional[str] = Query(None, description="Model ID"),
-    provider: str = Query("lmstudio", description="Provider: lmstudio or gemini")
+    provider: str = Query("lmstudio", description="Provider: lmstudio, gemini, or hybrid")
 ):
     """
     Simple search - single pass search and synthesis with adaptive response format.
