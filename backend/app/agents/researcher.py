@@ -5,19 +5,55 @@ This agent uses dynamic planning and adapts its research strategy based on the q
 
 import os
 from typing import TypedDict, Annotated, List, Literal
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 
 from app.tools.searxng import search_searxng, format_results_for_llm, SearchResult
 
+LMSTUDIO_BASE_URL = "http://127.0.0.1:1234/v1"
 
-def get_llm(temperature: float = 0.4):
-    """Get LLM with configurable temperature for varied outputs."""
-    return ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=temperature,
-    )
+# Global settings that can be changed at runtime
+_current_model: str | None = None
+_current_provider: str = "lmstudio"  # "lmstudio" or "gemini"
+
+
+def set_current_model(model: str | None):
+    """Set the current model to use for LLM calls."""
+    global _current_model
+    _current_model = model
+
+
+def set_current_provider(provider: str):
+    """Set the current provider (lmstudio or gemini)."""
+    global _current_provider
+    _current_provider = provider
+
+
+def get_llm(temperature: float = 0.4, model: str | None = None, provider: str | None = None):
+    """Get LLM from the specified provider with configurable temperature and model."""
+    model_to_use = model or _current_model
+    provider_to_use = provider or _current_provider
+    
+    if provider_to_use == "gemini":
+        # Use Gemini
+        gemini_model = model_to_use or "gemini-2.5-flash"
+        return ChatGoogleGenerativeAI(
+            model=gemini_model,
+            google_api_key=os.getenv("GEMINI_API_KEY"),
+            temperature=temperature,
+        )
+    else:
+        # Use LMStudio (default)
+        kwargs = {
+            "base_url": LMSTUDIO_BASE_URL,
+            "api_key": "lm-studio",
+            "temperature": temperature,
+        }
+        if model_to_use:
+            kwargs["model"] = model_to_use
+        return ChatOpenAI(**kwargs)
 
 
 class ResearchState(TypedDict):
@@ -29,15 +65,18 @@ class ResearchState(TypedDict):
     current_question_idx: int
     search_results: List[dict]
     findings: List[str]
+    subquery_answers: List[dict]  # Store individual subquery answers
     knowledge_gaps: List[str]
     final_answer: str
     iteration: int
     max_iterations: int
     status: str
+    coverage_score: int  # 1-10 score for research completeness
+    follow_up_queries: List[str]  # dynamically generated follow-up searches
     progress_messages: Annotated[list, add_messages]
 
 
-QUERY_ANALYSIS_PROMPT = """You are an expert research strategist. Analyze this query and determine the optimal research approach.
+QUERY_ANALYSIS_PROMPT = """You are an expert research strategist. Analyze this query and create a comprehensive research plan.
 
 Query: "{query}"
 
@@ -46,53 +85,118 @@ Respond with a JSON object (and nothing else):
     "query_type": "factual|comparative|exploratory|how-to|opinion|technical",
     "complexity": "simple|moderate|complex",
     "research_depth": "quick|standard|deep",
+    "estimated_sources_needed": <number between 5-50>,
     "key_aspects": ["aspect1", "aspect2", ...],
-    "sub_questions": ["question1", "question2", ...],
-    "search_strategy": "explain your search approach in one sentence"
+    "sub_questions": ["search query 1", "search query 2", ...],
+    "search_strategy": "explain your search approach"
 }}
 
-Guidelines:
-- For FACTUAL queries (dates, definitions, simple facts): 2-3 focused sub-questions
-- For COMPARATIVE queries (X vs Y, pros/cons): 4-5 sub-questions covering each option
-- For EXPLORATORY queries (how, why, complex topics): 5-7 sub-questions from multiple angles  
-- For HOW-TO queries: step-by-step breakdown
-- For OPINION/DEBATE topics: include multiple perspectives
+IMPORTANT - Generate SEARCH QUERIES, NOT questions!
+Do NOT generate "wh" questions (what, why, when, how, where, who).
+Generate SHORT KEYWORD-BASED SEARCH QUERIES like users type into search engines.
 
-Generate sub-questions that are:
-1. Specific and searchable
-2. Cover different angles (technical, practical, historical, future)
-3. Build on each other logically"""
+Examples of BAD queries:
+- "What is the difference between React and Vue?"
+- "How does machine learning work?"
+
+Examples of GOOD queries:
+- "React vs Vue performance comparison 2024"
+- "machine learning fundamentals explained"
+- "Next.js vs Remix benchmarks"
+- "Python async await best practices"
+
+GENERATE AS MANY QUERIES AS NEEDED FOR COMPREHENSIVE COVERAGE:
+- Simple factual queries: 4-6 search queries
+- Moderate complexity: 8-12 search queries  
+- Complex/deep topics: 15-25 search queries covering ALL angles
+
+For complex topics, ensure you cover:
+1. Core concepts and fundamentals
+2. Technical deep-dives and specifications
+3. Comparisons and alternatives
+4. Best practices and common pitfalls
+5. Real-world examples and case studies
+6. Recent developments and trends (2024/2025)
+7. Expert opinions and community consensus
+8. Edge cases and limitations
+
+Query format: 2-6 keywords, include year for time-sensitive topics, use modifiers like "vs", "comparison", "tutorial", "best practices", "examples"""
 
 
-ANALYSIS_PROMPT_TEMPLATE = """You are a meticulous research analyst. Extract comprehensive insights from these search results.
+SUBQUERY_ANSWER_PROMPT = """You are a research assistant answering a specific research subquery. Provide a comprehensive, self-contained answer to this subquery using ONLY the provided search results.
 
-Research Question: {question}
+Subquery: {question}
 
 Search Results:
 {results}
 
-Instructions:
-1. Extract ALL relevant facts, statistics, dates, and quotes
-2. Note any contradictions or different perspectives
-3. Identify what's still unclear or needs more research
-4. Be thorough - this is for a comprehensive research report
+Provide a COMPLETE ANSWER to this specific subquery:
 
-Format your response as:
+1. ANSWER THE SUBQUERY DIRECTLY:
+   - Start with a clear, direct answer
+   - Include all relevant facts, statistics, and specifics
+   - Use exact numbers, dates, and names from the sources
+   - Quote or paraphrase key information
 
-### Key Findings
-- [Detailed finding with specific data] [1]
-- [Another finding with context] [2]
-...
+2. PROVIDE SUPPORTING DETAILS:
+   - Explain the context and background
+   - Include technical details where relevant
+   - Note any important caveats or limitations
 
-### Important Details
-- [Specific numbers, dates, names mentioned]
-- [Notable quotes or claims]
+3. CITE YOUR SOURCES:
+   - Use [1], [2], etc. to cite specific sources
+   - Only include information that appears in the search results
 
-### Gaps & Uncertainties
-- [What information is missing or unclear]
-- [Conflicting information found]
+Format your answer as:
 
-Be detailed and specific. Do NOT summarize too briefly - we need the full picture."""
+## Answer to: {question}
+
+[Your comprehensive answer - aim for 150-300 words that fully address the subquery]
+
+### Key Facts
+- [Fact 1] [source]
+- [Fact 2] [source]
+- [Fact 3] [source]
+
+### Additional Context
+[Any important nuances, caveats, or related information]
+
+Be thorough but focused. This answer should stand alone and fully address the subquery."""
+
+
+COVERAGE_EVALUATION_PROMPT = """You are a research quality analyst. Evaluate whether the research conducted so far provides comprehensive coverage of the topic.
+
+Original Query: {query}
+
+Research Completed So Far:
+{findings_summary}
+
+Number of sources analyzed: {source_count}
+Research areas covered: {areas_covered}
+
+Evaluate the research coverage and respond with a JSON object:
+{{
+    "coverage_score": <1-10, where 10 is completely comprehensive>,
+    "should_continue": <true/false>,
+    "missing_aspects": ["aspect1", "aspect2", ...],
+    "follow_up_queries": ["search query 1", "search query 2", ...],
+    "reasoning": "explain why more research is or isn't needed"
+}}
+
+Criteria for deciding to continue:
+- Coverage score below 7 = definitely continue
+- Important aspects of the topic not yet explored
+- Contradictions that need resolution
+- Only surface-level information found
+- User likely expects more depth
+
+Criteria for stopping:
+- Coverage score 8+ with all key aspects addressed
+- Diminishing returns (same info repeated)
+- Already have 15+ quality sources
+- All obvious angles have been explored
+
+If should_continue is true, provide 3-8 follow_up_queries using the same keyword-based format (NOT questions)."""
 
 
 def get_synthesis_prompt(query: str, query_type: str, findings: str, sources: str) -> str:
@@ -334,12 +438,17 @@ async def analyze_and_plan(state: ResearchState) -> ResearchState:
     query_type = analysis.get("query_type", "exploratory")
     sub_questions = analysis.get("sub_questions", [state["query"]])
     research_depth = analysis.get("research_depth", "standard")
+    estimated_sources = analysis.get("estimated_sources_needed", 15)
     
     # Ensure we have good sub-questions
     if len(sub_questions) < 2:
         sub_questions = [state["query"]]
     
-    max_iterations = {"quick": 6, "standard": 10, "deep": 15}.get(research_depth, 10)
+    # For deep mode, set high iteration limit - actual stopping is dynamic
+    if research_depth == "deep":
+        max_iterations = 50  # High limit, actual stopping decided by coverage evaluation
+    else:
+        max_iterations = {"quick": 6, "standard": 15}.get(research_depth, 15)
     
     return {
         **state,
@@ -348,10 +457,12 @@ async def analyze_and_plan(state: ResearchState) -> ResearchState:
         "sub_questions": sub_questions,
         "current_question_idx": 0,
         "max_iterations": max_iterations,
+        "coverage_score": 0,
+        "follow_up_queries": [],
         "status": "planned",
         "progress_messages": [
             f"📋 Query type: {query_type} | Depth: {research_depth}",
-            f"🎯 Planning {len(sub_questions)} research areas"
+            f"🎯 Planning {len(sub_questions)} initial research areas (targeting ~{estimated_sources} sources)"
         ],
     }
 
@@ -365,7 +476,7 @@ async def search_web(state: ResearchState) -> ResearchState:
     current_q = state["sub_questions"][idx]
     
     # More results for deep research
-    max_results = {"quick": 4, "standard": 6, "deep": 8}.get(state.get("research_depth", "standard"), 6)
+    max_results = {"quick": 4, "standard": 8, "deep": 12}.get(state.get("research_depth", "standard"), 8)
     results = await search_searxng(current_q, max_results=max_results)
     
     new_results = state["search_results"].copy()
@@ -380,50 +491,59 @@ async def search_web(state: ResearchState) -> ResearchState:
 
 
 async def analyze_results(state: ResearchState) -> ResearchState:
-    """Extract detailed findings from search results."""
+    """Answer each subquery within context and store the answer."""
     llm = get_llm(temperature=0.3)
     idx = state["current_question_idx"]
     current_q = state["sub_questions"][idx]
     
     # Get all results for this question
-    results_per_question = {"quick": 4, "standard": 6, "deep": 8}.get(state.get("research_depth", "standard"), 6)
+    results_per_question = {"quick": 4, "standard": 8, "deep": 12}.get(state.get("research_depth", "standard"), 8)
     recent_results = state["search_results"][-results_per_question:]
     formatted = format_results_for_llm([SearchResult(**r) for r in recent_results])
     
-    prompt = ANALYSIS_PROMPT_TEMPLATE.format(
+    # Generate a complete answer for this subquery
+    prompt = SUBQUERY_ANSWER_PROMPT.format(
         question=current_q,
         results=formatted
     )
     
     response = await llm.ainvoke(prompt)
     
+    # Store both findings and structured subquery answer
     new_findings = state["findings"].copy()
     new_findings.append(f"## Research Area {idx + 1}: {current_q}\n\n{response.content}")
     
-    # Extract knowledge gaps for potential follow-up
-    new_gaps = state.get("knowledge_gaps", []).copy()
-    if "Gaps" in response.content or "unclear" in response.content.lower():
-        new_gaps.append(f"Gap from Q{idx+1}: Review needed")
+    new_subquery_answers = state.get("subquery_answers", []).copy()
+    new_subquery_answers.append({
+        "subquery": current_q,
+        "answer": response.content,
+        "sources": recent_results
+    })
     
     return {
         **state,
         "findings": new_findings,
-        "knowledge_gaps": new_gaps,
+        "subquery_answers": new_subquery_answers,
         "current_question_idx": idx + 1,
         "iteration": state["iteration"] + 1,
         "status": "analyzing",
-        "progress_messages": [f"📊 Analyzed: {current_q[:50]}..."],
+        "progress_messages": [f"📊 Answered: {current_q[:50]}..."],
     }
 
 
 async def synthesize_answer(state: ResearchState) -> ResearchState:
-    """Synthesize comprehensive, dynamic answer based on query type."""
-    llm = get_llm(temperature=0.5)  # Slightly higher for more natural writing
+    """Synthesize final answer by summarizing all subquery answers."""
+    llm = get_llm(temperature=0.5)
     
-    all_findings = "\n\n---\n\n".join(state["findings"])
-    sources = [SearchResult(**r) for r in state["search_results"]]
+    # Build a structured summary of all subquery answers
+    subquery_summaries = []
+    for i, sq in enumerate(state.get("subquery_answers", [])):
+        subquery_summaries.append(f"### Subquery {i+1}: {sq['subquery']}\n\n{sq['answer']}")
+    
+    all_subquery_answers = "\n\n---\n\n".join(subquery_summaries)
     
     # Create numbered source list
+    sources = [SearchResult(**r) for r in state["search_results"]]
     unique_sources = []
     seen_urls = set()
     for s in sources:
@@ -437,25 +557,131 @@ async def synthesize_answer(state: ResearchState) -> ResearchState:
     ])
     
     query_type = state.get("query_type", "exploratory")
-    prompt = get_synthesis_prompt(state["query"], query_type, all_findings, source_list)
     
-    response = await llm.ainvoke(prompt)
+    # Modified synthesis prompt that summarizes subquery answers
+    synthesis_prompt = f"""You are an expert researcher writing a comprehensive final report.
+
+Original Question: {state["query"]}
+
+You have already answered each subquery in detail. Here are all the subquery answers:
+
+{all_subquery_answers}
+
+Sources Used:
+{source_list}
+
+Your task is to synthesize ALL the subquery answers into ONE cohesive, comprehensive final answer.
+
+IMPORTANT:
+1. Include key information from EVERY subquery answer above - do not skip any
+2. Organize the information logically, not just in the order of subqueries
+3. Remove redundancy but preserve all unique facts and insights
+4. Use specific facts, numbers, and citations from the subquery answers
+5. Create a unified narrative that comprehensively answers the original question
+
+{get_synthesis_prompt(state["query"], query_type, "", "").split("Research Findings:")[0]}
+
+Write the final synthesized answer now:"""
+    
+    response = await llm.ainvoke(synthesis_prompt)
     
     return {
         **state,
         "final_answer": response.content,
         "status": "complete",
-        "progress_messages": [f"✅ Research complete! Compiled {len(state['findings'])} research areas."],
+        "progress_messages": [f"✅ Research complete! Synthesized {len(state.get('subquery_answers', []))} subquery answers."],
     }
 
 
-def should_continue_research(state: ResearchState) -> Literal["search", "synthesize"]:
-    """Decide whether to continue researching or synthesize."""
-    if state["current_question_idx"] >= len(state["sub_questions"]):
-        return "synthesize"
+def should_continue_research(state: ResearchState) -> Literal["search", "evaluate", "synthesize"]:
+    """Decide whether to continue researching, evaluate coverage, or synthesize."""
+    research_depth = state.get("research_depth", "standard")
+    
+    # If there are more initial queries to process
+    if state["current_question_idx"] < len(state["sub_questions"]):
+        return "search"
+    
+    # If there are follow-up queries to process
+    if state.get("follow_up_queries", []):
+        return "search"
+    
+    # For deep mode, evaluate coverage dynamically
+    if research_depth == "deep" and state["iteration"] < state["max_iterations"]:
+        return "evaluate"
+    
+    # For quick/standard or if max iterations reached
     if state["iteration"] >= state["max_iterations"]:
         return "synthesize"
-    return "search"
+    
+    return "synthesize"
+
+
+async def evaluate_coverage(state: ResearchState) -> ResearchState:
+    """Dynamically evaluate if more research is needed (for deep mode)."""
+    import json
+    llm = get_llm(temperature=0.3)
+    
+    # Summarize findings for evaluation
+    findings_summary = "\n".join([
+        f"- {finding[:200]}..." for finding in state["findings"][-10:]
+    ])
+    
+    areas_covered = ", ".join(state["sub_questions"][:10])
+    
+    prompt = COVERAGE_EVALUATION_PROMPT.format(
+        query=state["query"],
+        findings_summary=findings_summary,
+        source_count=len(state["search_results"]),
+        areas_covered=areas_covered
+    )
+    
+    response = await llm.ainvoke(prompt)
+    content = response.content
+    
+    # Parse JSON response
+    try:
+        start = content.find('{')
+        end = content.rfind('}') + 1
+        if start != -1 and end > start:
+            evaluation = json.loads(content[start:end])
+        else:
+            evaluation = {"coverage_score": 8, "should_continue": False}
+    except:
+        evaluation = {"coverage_score": 8, "should_continue": False}
+    
+    coverage_score = evaluation.get("coverage_score", 8)
+    should_continue = evaluation.get("should_continue", False)
+    follow_up_queries = evaluation.get("follow_up_queries", [])
+    reasoning = evaluation.get("reasoning", "")
+    
+    # If continuing, add follow-up queries to sub_questions
+    new_sub_questions = state["sub_questions"].copy()
+    if should_continue and follow_up_queries:
+        new_sub_questions.extend(follow_up_queries)
+    
+    progress_msg = f"🔬 Coverage: {coverage_score}/10"
+    if should_continue:
+        progress_msg += f" - Expanding research with {len(follow_up_queries)} more queries"
+    else:
+        progress_msg += " - Sufficient coverage achieved"
+    
+    return {
+        **state,
+        "coverage_score": coverage_score,
+        "sub_questions": new_sub_questions,
+        "follow_up_queries": [],  # Clear after adding to sub_questions
+        "status": "evaluating",
+        "progress_messages": [progress_msg],
+    }
+
+
+def should_continue_after_eval(state: ResearchState) -> Literal["search", "synthesize"]:
+    """After evaluation, decide to continue or synthesize."""
+    # If there are more queries to process
+    if state["current_question_idx"] < len(state["sub_questions"]):
+        return "search"
+    # If coverage is good enough or max iterations reached
+    return "synthesize"
 
 
 def create_research_graph():
@@ -465,6 +691,7 @@ def create_research_graph():
     workflow.add_node("plan", analyze_and_plan)
     workflow.add_node("search", search_web)
     workflow.add_node("analyze", analyze_results)
+    workflow.add_node("evaluate", evaluate_coverage)
     workflow.add_node("synthesize", synthesize_answer)
     
     workflow.set_entry_point("plan")
@@ -473,6 +700,15 @@ def create_research_graph():
     workflow.add_conditional_edges(
         "analyze",
         should_continue_research,
+        {
+            "search": "search",
+            "evaluate": "evaluate",
+            "synthesize": "synthesize",
+        }
+    )
+    workflow.add_conditional_edges(
+        "evaluate",
+        should_continue_after_eval,
         {
             "search": "search",
             "synthesize": "synthesize",
@@ -486,8 +722,13 @@ def create_research_graph():
 research_graph = create_research_graph()
 
 
-async def run_research(query: str, on_progress=None):
+async def run_research(query: str, on_progress=None, model: str | None = None, provider: str = "lmstudio"):
     """Run the research agent with progress callbacks."""
+    # Set the model and provider for this research session
+    if model:
+        set_current_model(model)
+    set_current_provider(provider)
+    
     initial_state: ResearchState = {
         "query": query,
         "query_type": "exploratory",
@@ -496,11 +737,14 @@ async def run_research(query: str, on_progress=None):
         "current_question_idx": 0,
         "search_results": [],
         "findings": [],
+        "subquery_answers": [],
         "knowledge_gaps": [],
         "final_answer": "",
         "iteration": 0,
-        "max_iterations": 10,
+        "max_iterations": 15,
         "status": "starting",
+        "coverage_score": 0,
+        "follow_up_queries": [],
         "progress_messages": [],
     }
     

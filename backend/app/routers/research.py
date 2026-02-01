@@ -5,7 +5,7 @@ import asyncio
 from fastapi import APIRouter, Query
 from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel
-from typing import List, AsyncGenerator
+from typing import List, AsyncGenerator, Optional
 
 from app.agents.researcher import run_research
 from app.tools.searxng import SearchResult
@@ -22,7 +22,7 @@ class ResearchResponse(BaseModel):
     iterations: int
 
 
-async def research_event_generator(query: str) -> AsyncGenerator[str, None]:
+async def research_event_generator(query: str, model: Optional[str] = None, provider: str = "lmstudio") -> AsyncGenerator[str, None]:
     """Generate SSE events for research progress."""
     
     progress_queue = asyncio.Queue()
@@ -33,7 +33,7 @@ async def research_event_generator(query: str) -> AsyncGenerator[str, None]:
     # Start research in background
     async def run():
         try:
-            result = await run_research(query, on_progress)
+            result = await run_research(query, on_progress, model=model, provider=provider)
             await progress_queue.put({"type": "complete", "data": result})
         except Exception as e:
             await progress_queue.put({"type": "error", "message": str(e)})
@@ -79,7 +79,11 @@ async def research_event_generator(query: str) -> AsyncGenerator[str, None]:
 
 
 @router.get("/research")
-async def deep_research(q: str = Query(..., description="Research query")):
+async def deep_research(
+    q: str = Query(..., description="Research query"),
+    model: Optional[str] = Query(None, description="LMStudio model to use"),
+    provider: str = Query("lmstudio", description="Provider: lmstudio or gemini")
+):
     """
     Deep research with LangGraph agent.
     
@@ -88,18 +92,22 @@ async def deep_research(q: str = Query(..., description="Research query")):
     - Final comprehensive answer
     """
     return EventSourceResponse(
-        research_event_generator(q),
+        research_event_generator(q, model=model, provider=provider),
         media_type="text/event-stream",
     )
 
 
 @router.get("/research/sync", response_model=ResearchResponse)
-async def deep_research_sync(q: str = Query(..., description="Research query")):
+async def deep_research_sync(
+    q: str = Query(..., description="Research query"),
+    model: Optional[str] = Query(None, description="LMStudio model to use"),
+    provider: str = Query("lmstudio", description="Provider: lmstudio or gemini")
+):
     """
     Deep research without streaming (for testing).
     Waits for full result before returning.
     """
-    result = await run_research(q)
+    result = await run_research(q, model=model, provider=provider)
     
     return ResearchResponse(
         answer=result.get("final_answer", ""),
@@ -107,3 +115,4 @@ async def deep_research_sync(q: str = Query(..., description="Research query")):
         sub_questions=result.get("sub_questions", []),
         iterations=result.get("iteration", 0),
     )
+

@@ -3,6 +3,8 @@
 import { useState, useCallback } from "react";
 import SearchBar from "@/components/SearchBar";
 import ModeToggle from "@/components/ModeToggle";
+import ModelSelector from "@/components/ModelSelector";
+import ProviderSelector from "@/components/ProviderSelector";
 import ResultsPane from "@/components/ResultsPane";
 import AgentProgress from "@/components/AgentProgress";
 import ThemeControls from "@/components/ThemeControls";
@@ -28,6 +30,8 @@ interface ProgressEvent {
 
 export default function Home() {
   const [mode, setMode] = useState<"simple" | "deep">("simple");
+  const [provider, setProvider] = useState<"lmstudio" | "gemini">("gemini");
+  const [selectedModel, setSelectedModel] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [answer, setAnswer] = useState("");
   const [sources, setSources] = useState<SearchResult[]>([]);
@@ -46,10 +50,13 @@ export default function Home() {
       setProgress(null);
       setSubQuestions([]);
 
+      const modelParam = selectedModel ? `&model=${encodeURIComponent(selectedModel)}` : "";
+      const providerParam = `&provider=${provider}`;
+
       try {
         if (mode === "simple") {
           const response = await fetch(
-            `${API_URL}/api/search?q=${encodeURIComponent(query)}`
+            `${API_URL}/api/search?q=${encodeURIComponent(query)}${modelParam}${providerParam}`
           );
 
           if (!response.ok) {
@@ -61,7 +68,7 @@ export default function Home() {
           setSources(data.sources);
         } else {
           const eventSource = new EventSource(
-            `${API_URL}/api/research?q=${encodeURIComponent(query)}`
+            `${API_URL}/api/research?q=${encodeURIComponent(query)}${modelParam}${providerParam}`
           );
 
           eventSource.onmessage = (event) => {
@@ -103,7 +110,7 @@ export default function Home() {
         }
       }
     },
-    [mode]
+    [mode, selectedModel, provider]
   );
 
   return (
@@ -121,7 +128,15 @@ export default function Home() {
 
         {/* Search Controls */}
         <div className="space-y-5 mb-10">
-          <ModeToggle mode={mode} onModeChange={setMode} />
+          <div className="flex gap-4 justify-center flex-wrap">
+            <ProviderSelector provider={provider} onProviderChange={setProvider} />
+            <ModeToggle mode={mode} onModeChange={setMode} />
+          </div>
+          {provider === "lmstudio" && (
+            <div className="flex justify-center">
+              <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
+            </div>
+          )}
           <SearchBar onSearch={handleSearch} isLoading={isLoading} />
         </div>
 
@@ -141,7 +156,7 @@ export default function Home() {
 
         {/* Footer */}
         <footer className="text-center text-[var(--text-muted)] text-xs mt-16 tracking-wide">
-          langgraph + groq + searxng
+          langgraph + lmstudio/gemini + searxng
         </footer>
       </div>
 
@@ -150,3 +165,4 @@ export default function Home() {
     </main>
   );
 }
+

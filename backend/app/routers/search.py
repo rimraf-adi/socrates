@@ -3,10 +3,13 @@
 import os
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
-from typing import List
-from langchain_groq import ChatGroq
+from typing import List, Optional
+from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.tools.searxng import search_searxng, format_results_for_llm, SearchResult
+
+LMSTUDIO_BASE_URL = "http://127.0.0.1:1234/v1"
 
 
 router = APIRouter()
@@ -176,8 +179,29 @@ GUIDELINES:
 """
 
 
+def get_llm_for_search(model: Optional[str], provider: str, temperature: float = 0.4):
+    """Get the appropriate LLM based on provider."""
+    if provider == "gemini":
+        gemini_model = model or "gemini-2.5-flash"
+        return ChatGoogleGenerativeAI(
+            model=gemini_model,
+            google_api_key=os.getenv("GEMINI_API_KEY"),
+            temperature=temperature,
+        )
+    else:
+        # LMStudio (default)
+        llm_kwargs = {"base_url": LMSTUDIO_BASE_URL, "api_key": "lm-studio", "temperature": temperature}
+        if model:
+            llm_kwargs["model"] = model
+        return ChatOpenAI(**llm_kwargs)
+
+
 @router.get("/search", response_model=SearchResponse)
-async def simple_search(q: str = Query(..., description="Search query")):
+async def simple_search(
+    q: str = Query(..., description="Search query"),
+    model: Optional[str] = Query(None, description="Model ID"),
+    provider: str = Query("lmstudio", description="Provider: lmstudio or gemini")
+):
     """
     Simple search - single pass search and synthesis with adaptive response format.
     """
@@ -200,8 +224,8 @@ async def simple_search(q: str = Query(..., description="Search query")):
     # Generate adaptive prompt
     prompt = get_simple_search_prompt(q, query_type, context)
     
-    # Synthesize with Groq
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.4)
+    # Get LLM based on provider
+    llm = get_llm_for_search(model, provider)
     response = await llm.ainvoke(prompt)
     
     return SearchResponse(
@@ -209,3 +233,4 @@ async def simple_search(q: str = Query(..., description="Search query")):
         sources=[r.model_dump() for r in results],
         query_type=query_type,
     )
+

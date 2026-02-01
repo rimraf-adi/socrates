@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Load environment variables
 load_dotenv()
 
-from app.routers import search, research
+from app.routers import search, research, models
 
 
 @asynccontextmanager
@@ -39,6 +39,7 @@ app.add_middleware(
 # Include routers
 app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(research.router, prefix="/api", tags=["research"])
+app.include_router(models.router, prefix="/api", tags=["models"])
 
 
 @app.get("/")
