@@ -8,10 +8,10 @@ interface ResearchSettingsProps {
 }
 
 const DEPTH_INFO = {
-    quick: { label: "Quick", iterations: 5, description: "Fast overview" },
-    standard: { label: "Standard", iterations: 10, description: "Balanced research" },
-    deep: { label: "Deep", iterations: 15, description: "Thorough analysis" },
-    exhaustive: { label: "Exhaustive", iterations: 20, description: "Maximum depth" },
+    quick: { label: "Quick", iterations: 5, icon: "⚡" },
+    standard: { label: "Standard", iterations: 10, icon: "🔍" },
+    deep: { label: "Deep", iterations: 15, icon: "🔬" },
+    exhaustive: { label: "Exhaustive", iterations: 20, icon: "🧠" },
 };
 
 export default function ResearchSettings({
@@ -23,53 +23,67 @@ export default function ResearchSettings({
     const currentIterations = maxIterations ?? DEPTH_INFO[depth].iterations;
 
     return (
-        <div className="glass-panel p-4 space-y-4">
+        <div className="glass-panel p-5 space-y-5">
             {/* Depth Selector */}
-            <div className="space-y-2">
-                <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
+            <div className="space-y-3">
+                <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium">
                     Research Depth
                 </label>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-4 gap-2">
                     {(Object.keys(DEPTH_INFO) as Array<keyof typeof DEPTH_INFO>).map((key) => (
                         <button
                             key={key}
                             onClick={() => {
                                 onDepthChange(key);
-                                onMaxIterationsChange(null); // Reset custom iterations when depth changes
+                                onMaxIterationsChange(null);
                             }}
-                            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${depth === key
-                                    ? "bg-[var(--accent)] text-white"
-                                    : "bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                            className={`px-3 py-3 rounded-xl text-sm font-medium transition-all duration-200 flex flex-col items-center gap-1 ${depth === key
+                                    ? "bg-gradient-to-br from-purple-500/20 to-cyan-500/20 text-[var(--text-primary)] border border-purple-500/30 shadow-lg shadow-purple-500/10"
+                                    : "bg-[var(--bg-muted)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] border border-transparent"
                                 }`}
-                            title={DEPTH_INFO[key].description}
                         >
-                            {DEPTH_INFO[key].label}
+                            <span className="text-lg">{DEPTH_INFO[key].icon}</span>
+                            <span>{DEPTH_INFO[key].label}</span>
                         </button>
                     ))}
                 </div>
             </div>
 
             {/* Iterations Slider */}
-            <div className="space-y-2">
+            <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                    <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
+                    <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium">
                         Max Iterations
                     </label>
-                    <span className="text-sm font-medium text-[var(--accent)]">
+                    <span className="text-sm font-bold gradient-text">
                         {currentIterations}
                     </span>
                 </div>
-                <input
-                    type="range"
-                    min="3"
-                    max="25"
-                    value={currentIterations}
-                    onChange={(e) => onMaxIterationsChange(parseInt(e.target.value))}
-                    className="w-full accent-[var(--accent)] cursor-pointer"
-                />
+                <div className="relative">
+                    <input
+                        type="range"
+                        min="3"
+                        max="25"
+                        value={currentIterations}
+                        onChange={(e) => onMaxIterationsChange(parseInt(e.target.value))}
+                        className="w-full h-2 bg-[var(--bg-subtle)] rounded-full appearance-none cursor-pointer 
+              [&::-webkit-slider-thumb]:appearance-none 
+              [&::-webkit-slider-thumb]:w-5 
+              [&::-webkit-slider-thumb]:h-5 
+              [&::-webkit-slider-thumb]:rounded-full 
+              [&::-webkit-slider-thumb]:bg-gradient-to-r 
+              [&::-webkit-slider-thumb]:from-purple-500 
+              [&::-webkit-slider-thumb]:to-cyan-500 
+              [&::-webkit-slider-thumb]:shadow-lg 
+              [&::-webkit-slider-thumb]:shadow-purple-500/30
+              [&::-webkit-slider-thumb]:cursor-pointer
+              [&::-webkit-slider-thumb]:transition-transform
+              [&::-webkit-slider-thumb]:hover:scale-110"
+                    />
+                </div>
                 <div className="flex justify-between text-xs text-[var(--text-muted)]">
-                    <span>Faster</span>
-                    <span>More thorough</span>
+                    <span>⚡ Faster</span>
+                    <span>More thorough 🔬</span>
                 </div>
             </div>
         </div>

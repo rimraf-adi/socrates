@@ -9,6 +9,7 @@ from typing import List, AsyncGenerator, Optional
 
 from app.agents.researcher import run_research
 from app.tools.searxng import SearchResult
+from app.services.storage import save_research
 
 
 router = APIRouter()
@@ -47,7 +48,7 @@ async def research_event_generator(
                 depth=depth,
                 max_iterations=max_iterations
             )
-            await progress_queue.put({"type": "complete", "data": result})
+            await progress_queue.put({"type": "complete", "data": result, "depth": depth, "provider": provider})
         except Exception as e:
             await progress_queue.put({"type": "error", "message": str(e)})
     
@@ -61,12 +62,33 @@ async def research_event_generator(
                 if event.get("type") == "complete":
                     # Send final result
                     data = event["data"]
+                    answer = data.get("final_answer", "")
+                    sources = data.get("search_results", [])
+                    sub_questions = data.get("sub_questions", [])
+                    iterations = data.get("iteration", 0)
+                    
+                    # Save to ~/Documents/socrates
+                    saved = None
+                    try:
+                        saved = save_research(
+                            query=query,
+                            answer=answer,
+                            sources=sources,
+                            sub_questions=sub_questions,
+                            provider=event.get("provider", provider),
+                            depth=event.get("depth", depth),
+                            iterations=iterations,
+                        )
+                    except Exception as e:
+                        print(f"Failed to save research: {e}")
+                    
                     yield json.dumps({
                         "type": "complete",
-                        "answer": data.get("final_answer", ""),
-                        "sources": data.get("search_results", []),
-                        "sub_questions": data.get("sub_questions", []),
-                        "iterations": data.get("iteration", 0),
+                        "answer": answer,
+                        "sources": sources,
+                        "sub_questions": sub_questions,
+                        "iterations": iterations,
+                        "saved": saved,
                     })
                     break
                 elif event.get("type") == "error":
@@ -89,6 +111,7 @@ async def research_event_generator(
                 yield json.dumps({"type": "ping"})
     finally:
         task.cancel()
+
 
 
 @router.get("/research")

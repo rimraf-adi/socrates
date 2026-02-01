@@ -9,6 +9,7 @@ import ResearchSettings from "@/components/ResearchSettings";
 import ResultsPane from "@/components/ResultsPane";
 import AgentProgress from "@/components/AgentProgress";
 import ThemeControls from "@/components/ThemeControls";
+import Sidebar from "@/components/Sidebar";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -29,6 +30,16 @@ interface ProgressEvent {
   sources?: SearchResult[];
 }
 
+interface HistoryItem {
+  id: string;
+  query: string;
+  provider: string;
+  depth: string;
+  timestamp: string;
+  source_count: number;
+  dir_name: string;
+}
+
 export default function Home() {
   const [mode, setMode] = useState<"simple" | "deep">("simple");
   const [provider, setProvider] = useState<"lmstudio" | "gemini" | "hybrid">("hybrid");
@@ -41,6 +52,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [subQuestions, setSubQuestions] = useState<string[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSearch = useCallback(
     async (query: string) => {
@@ -118,65 +130,104 @@ export default function Home() {
     [mode, selectedModel, provider, depth, maxIterations]
   );
 
-  return (
-    <main className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] transition-colors duration-300">
-      <div className="max-w-3xl mx-auto px-6 py-16">
-        {/* Header */}
-        <header className="text-center mb-14">
-          <h1 className="text-4xl font-medium tracking-tight text-[var(--text-primary)] mb-2">
-            socrates
-          </h1>
-          <p className="text-sm text-[var(--text-muted)] tracking-wide">
-            open-source ai research assistant
-          </p>
-        </header>
+  const handleSelectHistory = async (item: HistoryItem) => {
+    // Load the saved research
+    try {
+      const response = await fetch(`${API_URL}/api/history/${encodeURIComponent(item.dir_name)}`);
+      if (response.ok) {
+        const data = await response.json();
+        // Extract answer from markdown content (skip the header lines)
+        const content = data.content || "";
+        const answerMatch = content.match(/## Research Answer\n\n([\s\S]*?)(?=\n---|\n## |$)/);
+        const answerText = answerMatch ? answerMatch[1].trim() : content;
 
-        {/* Search Controls */}
-        <div className="space-y-5 mb-10">
-          <div className="flex gap-4 justify-center flex-wrap">
-            <ProviderSelector provider={provider} onProviderChange={setProvider} />
-            <ModeToggle mode={mode} onModeChange={setMode} />
-          </div>
-          {provider === "lmstudio" && (
-            <div className="flex justify-center">
-              <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
+        setAnswer(answerText);
+        setSources(data.sources || []);
+        setSubQuestions(data.metadata?.sub_questions || []);
+        setMode("deep");
+        setSidebarOpen(false);
+      }
+    } catch (error) {
+      console.error("Failed to load history:", error);
+    }
+  };
+
+  return (
+    <>
+      {/* Sidebar */}
+      <Sidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onSelectHistory={handleSelectHistory}
+      />
+
+      <main className={`min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] transition-all duration-300 ${sidebarOpen ? 'lg:pl-80' : ''}`}>
+        <div className="max-w-3xl mx-auto px-6 py-12">
+          {/* Header */}
+          <header className="text-center mb-12">
+            <div className="inline-block mb-4">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-purple-500/30 animate-float">
+                <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+              </div>
             </div>
+            <h1 className="text-5xl font-bold tracking-tight mb-3">
+              <span className="gradient-text">socrates</span>
+            </h1>
+            <p className="text-base text-[var(--text-secondary)]">
+              AI-powered deep research assistant
+            </p>
+          </header>
+
+          {/* Search Controls */}
+          <div className="space-y-5 mb-10">
+            <div className="flex gap-4 justify-center flex-wrap">
+              <ProviderSelector provider={provider} onProviderChange={setProvider} />
+              <ModeToggle mode={mode} onModeChange={setMode} />
+            </div>
+            {provider === "lmstudio" && (
+              <div className="flex justify-center">
+                <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
+              </div>
+            )}
+            {mode === "deep" && (
+              <ResearchSettings
+                depth={depth}
+                maxIterations={maxIterations}
+                onDepthChange={setDepth}
+                onMaxIterationsChange={setMaxIterations}
+              />
+            )}
+            <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+          </div>
+
+          {/* Progress (Deep Research) */}
+          {mode === "deep" && progress && (
+            <AgentProgress progress={progress} subQuestions={subQuestions} />
           )}
-          {mode === "deep" && (
-            <ResearchSettings
-              depth={depth}
-              maxIterations={maxIterations}
-              onDepthChange={setDepth}
-              onMaxIterationsChange={setMaxIterations}
-            />
-          )}
-          <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+
+          {/* Results */}
+          <ResultsPane
+            answer={answer}
+            sources={sources}
+            isLoading={isLoading && !progress}
+            error={error}
+            isDeepResearch={mode === "deep"}
+          />
+
+          {/* Footer */}
+          <footer className="text-center text-[var(--text-muted)] text-xs mt-16 tracking-wide">
+            langgraph + lmstudio/gemini + searxng
+          </footer>
         </div>
 
-        {/* Progress (Deep Research) */}
-        {mode === "deep" && progress && (
-          <AgentProgress progress={progress} subQuestions={subQuestions} />
-        )}
-
-        {/* Results */}
-        <ResultsPane
-          answer={answer}
-          sources={sources}
-          isLoading={isLoading && !progress}
-          error={error}
-          isDeepResearch={mode === "deep"}
-        />
-
-        {/* Footer */}
-        <footer className="text-center text-[var(--text-muted)] text-xs mt-16 tracking-wide">
-          langgraph + lmstudio/gemini + searxng
-        </footer>
-      </div>
-
-      {/* Theme Controls */}
-      <ThemeControls />
-    </main>
+        {/* Theme Controls */}
+        <ThemeControls />
+      </main>
+    </>
   );
 }
+
 
 
