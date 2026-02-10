@@ -1,164 +1,127 @@
 @import "tailwindcss";
 
 /* ==========================================
-   PREMIUM DARK DESIGN SYSTEM
-   Inspired by Perplexity, Raycast, Linear
+   MINIMAL DESIGN SYSTEM
    ========================================== */
 
-/* CSS Variables for Dark/Light Mode */
 :root {
-  /* Light Mode */
-  --bg-base: #fafafa;
-  --bg-elevated: #ffffff;
-  --bg-muted: #f4f4f5;
-  --bg-subtle: #e4e4e7;
-  --text-primary: #09090b;
-  --text-secondary: #52525b;
-  --text-muted: #a1a1aa;
-  --border: #e4e4e7;
-  --border-subtle: #f4f4f5;
-
-  /* Gradient Accent - Purple to Cyan */
-  --accent: #8b5cf6;
-  --accent-secondary: #06b6d4;
-  --accent-hover: #7c3aed;
-  --accent-muted: rgba(139, 92, 246, 0.12);
-  --gradient-primary: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
-  --gradient-subtle: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(6, 182, 212, 0.1) 100%);
-
-  /* Glassmorphism */
-  --glass-bg: rgba(255, 255, 255, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.5);
-  --glass-blur: 20px;
-
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.08);
-  --shadow-glow: 0 0 40px rgba(139, 92, 246, 0.15);
-
-  /* Success / Error */
-  --success: #10b981;
-  --error: #ef4444;
-  --error-muted: rgba(239, 68, 68, 0.12);
-  --warning: #f59e0b;
+  /* Light Mode - defaults */
+  --bg-base: #ffffff;
+  --bg-elevated: #fafafa;
+  --bg-muted: #f5f5f5;
+  --text-primary: #171717;
+  --text-secondary: #525252;
+  --text-muted: #a3a3a3;
+  --border: #e5e5e5;
+  --accent: #171717;
+  --accent-muted: rgba(23, 23, 23, 0.08);
 }
 
+/* Dark Mode */
 .dark {
-  /* Dark Mode - Rich Deep Colors */
-  --bg-base: #09090b;
-  --bg-elevated: #0f0f12;
-  --bg-muted: #18181b;
-  --bg-subtle: #27272a;
+  --bg-base: #0a0a0a;
+  --bg-elevated: #141414;
+  --bg-muted: #1c1c1c;
   --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-muted: #52525b;
-  --border: #27272a;
-  --border-subtle: #1c1c1f;
-
-  /* Gradient Accent */
-  --accent: #a78bfa;
-  --accent-secondary: #22d3ee;
-  --accent-hover: #8b5cf6;
-  --accent-muted: rgba(167, 139, 250, 0.15);
-  --gradient-primary: linear-gradient(135deg, #a78bfa 0%, #22d3ee 100%);
-  --gradient-subtle: linear-gradient(135deg, rgba(167, 139, 250, 0.12) 0%, rgba(34, 211, 238, 0.08) 100%);
-
-  /* Glassmorphism - Dark */
-  --glass-bg: rgba(15, 15, 18, 0.8);
-  --glass-border: rgba(255, 255, 255, 0.06);
-
-  /* Shadows - Dark with Glow */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 60px rgba(139, 92, 246, 0.2);
+  --text-secondary: #a3a3a3;
+  --text-muted: #525252;
+  --border: #262626;
+  --accent: #fafafa;
+  --accent-muted: rgba(250, 250, 250, 0.08);
 }
 
-/* ==========================================
-   BASE STYLES
-   ========================================== */
+/* Accent Colors - Light Mode */
+:root.accent-purple {
+  --accent: #8b5cf6;
+  --accent-muted: rgba(139, 92, 246, 0.12);
+}
+
+:root.accent-blue {
+  --accent: #3b82f6;
+  --accent-muted: rgba(59, 130, 246, 0.12);
+}
+
+:root.accent-green {
+  --accent: #22c55e;
+  --accent-muted: rgba(34, 197, 94, 0.12);
+}
+
+:root.accent-orange {
+  --accent: #f97316;
+  --accent-muted: rgba(249, 115, 22, 0.12);
+}
+
+:root.accent-pink {
+  --accent: #ec4899;
+  --accent-muted: rgba(236, 72, 153, 0.12);
+}
+
+:root.accent-cyan {
+  --accent: #06b6d4;
+  --accent-muted: rgba(6, 182, 212, 0.12);
+}
+
+/* Accent Colors - Dark Mode */
+.dark.accent-purple {
+  --accent: #a78bfa;
+  --accent-muted: rgba(167, 139, 250, 0.15);
+}
+
+.dark.accent-blue {
+  --accent: #60a5fa;
+  --accent-muted: rgba(96, 165, 250, 0.15);
+}
+
+.dark.accent-green {
+  --accent: #4ade80;
+  --accent-muted: rgba(74, 222, 128, 0.15);
+}
+
+.dark.accent-orange {
+  --accent: #fb923c;
+  --accent-muted: rgba(251, 146, 60, 0.15);
+}
+
+.dark.accent-pink {
+  --accent: #f472b6;
+  --accent-muted: rgba(244, 114, 182, 0.15);
+}
+
+.dark.accent-cyan {
+  --accent: #22d3ee;
+  --accent-muted: rgba(34, 211, 238, 0.15);
+}
+
+html {
+  background: var(--bg-base);
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
 
 body {
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-mono), ui-monospace, monospace;
-  transition: background-color 0.3s ease, color 0.3s ease;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ==========================================
-   GLASSMORPHISM UTILITIES
-   ========================================== */
-
+/* Panels */
 .glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: 1rem;
-  box-shadow: var(--shadow-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
 }
 
 .glass-panel-strong {
   background: var(--bg-elevated);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--border);
-  border-radius: 1rem;
-  box-shadow: var(--shadow-lg);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* ==========================================
-   PREMIUM BUTTON STYLES
-   ========================================== */
-
-.btn-primary {
-  background: var(--gradient-primary);
-  color: white;
-  font-weight: 500;
-  padding: 0.625rem 1.25rem;
-  border-radius: 0.75rem;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
-}
-
-.btn-secondary {
-  background: var(--bg-muted);
-  color: var(--text-secondary);
-  font-weight: 500;
-  padding: 0.625rem 1.25rem;
-  border-radius: 0.75rem;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-secondary:hover {
-  background: var(--bg-subtle);
-  color: var(--text-primary);
-  border-color: var(--accent);
-}
-
-/* Active/Selected State */
-.btn-active {
-  background: var(--gradient-subtle);
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-/* ==========================================
-   THEME TOKENS FOR TAILWIND
-   ========================================== */
-
+/* Theme tokens */
 @theme inline {
   --color-bg-base: var(--bg-base);
   --color-bg-elevated: var(--bg-elevated);
@@ -167,88 +130,32 @@ body {
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
   --color-border-default: var(--border);
-  --color-border-subtle: var(--border-subtle);
   --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
   --color-accent-muted: var(--accent-muted);
-  --color-error: var(--error);
-  --color-error-muted: var(--error-muted);
   --font-mono: var(--font-jetbrains-mono);
 }
 
-/* ==========================================
-   PROSE OVERRIDES FOR MARKDOWN
-   ========================================== */
-
-.prose-minimal {
-  --tw-prose-body: var(--text-secondary);
-  --tw-prose-headings: var(--text-primary);
-  --tw-prose-links: var(--accent);
-  --tw-prose-bold: var(--text-primary);
-  --tw-prose-code: var(--accent);
-  --tw-prose-quotes: var(--text-secondary);
-}
-
-/* ==========================================
-   ANIMATION UTILITIES
-   ========================================== */
-
+/* Animations */
 @keyframes pulse-subtle {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
 
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
+  0%,
+  100% {
+    opacity: 1;
+  }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-4px); }
-}
-
-@keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3); }
-  50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.5); }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .animate-pulse-subtle {
   animation: pulse-subtle 2s ease-in-out infinite;
 }
 
-.animate-shimmer {
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
-
-.animate-glow {
-  animation: glow-pulse 2s ease-in-out infinite;
-}
-
-/* ==========================================
-   GRADIENT TEXT
-   ========================================== */
-
-.gradient-text {
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* ==========================================
-   SCROLLBAR STYLING
-   ========================================== */
-
+/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -257,27 +164,25 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
 
-/* ==========================================
-   FOCUS STATES
-   ========================================== */
-
+/* Focus */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* ==========================================
-   SELECTION
-   ========================================== */
-
 ::selection {
   background: var(--accent-muted);
-  color: var(--text-primary);
+}
+
+/* Reset input focus rings */
+input:focus,
+textarea:focus {
+  outline: none;
 }
