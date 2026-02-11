@@ -5,6 +5,9 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from tui import launch_tui
+from graph import run_task
+
 app = typer.Typer(help="Socrates & Plato — Generator-Critic Agent System")
 console = Console()
 
@@ -20,7 +23,6 @@ def main(
     """Launch TUI (default) or run headless with --task."""
     if task is None:
         # No task flag → launch TUI
-        from tui import launch_tui
         launch_tui()
         return
 
@@ -28,8 +30,6 @@ def main(
     task_text = task
     if os.path.isfile(task):
         task_text = Path(task).read_text().strip()
-
-    from graph import run_task
 
     result = asyncio.run(run_task(
         task=task_text,

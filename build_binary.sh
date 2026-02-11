@@ -15,6 +15,7 @@ rm -rf build dist socrates.spec
 # --add-data: Include necessary source files if needed (though --onefile usually handles imports)
 
 uv run pyinstaller --onefile --name socrates --clean \
+    --paths "$(pwd)" \
     --hidden-import textual \
     --hidden-import textual.driver \
     --hidden-import langchain \

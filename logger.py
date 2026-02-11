@@ -25,9 +25,10 @@ def save_iteration(output_dir: str, record: IterationRecord) -> str:
     return filepath
 
 
-def save_final(output_dir: str, task: str, history: list[IterationRecord], final_response: str) -> str:
+def save_final(output_dir: str, task: str, history: list[IterationRecord], final_response: str, filename: str = "final.md") -> str:
     os.makedirs(output_dir, exist_ok=True)
-    filepath = os.path.join(output_dir, "final.md")
+    filepath = os.path.join(output_dir, filename)
+
 
     sections = [f"# Task\n\n{task}\n"]
 
@@ -56,3 +57,10 @@ def save_final(output_dir: str, task: str, history: list[IterationRecord], final
         f.write("\n".join(sections))
 
     return filepath
+
+
+def update_summary(output_dir: str, task: str, history: list[IterationRecord]) -> str:
+    """Updates key summary file with all iterations so far."""
+    return save_final(output_dir, task, history, "Creating summary... (In Progress)", filename="summary.md")
+
+
