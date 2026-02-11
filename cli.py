@@ -15,6 +15,7 @@ def main(
     output: str = typer.Option("./output", "--output", "-o", help="Output directory"),
     iterations: int = typer.Option(3, "--iterations", "-n", help="Number of generator-critic iterations"),
     model: str = typer.Option(None, "--model", "-m", help="LMStudio model override"),
+    file_path: str = typer.Option(None, "--file", "-f", help="Context file path for agentic reading"),
 ):
     """Launch TUI (default) or run headless with --task."""
     if task is None:
@@ -35,6 +36,7 @@ def main(
         output_dir=output,
         iterations=iterations,
         model=model,
+        file_path=file_path,
     ))
 
     if result:

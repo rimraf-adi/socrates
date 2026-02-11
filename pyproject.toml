@@ -15,4 +15,9 @@ dependencies = [
     "textual>=0.50.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pyinstaller>=6.4.0",
+]
+
 

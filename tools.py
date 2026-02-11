@@ -28,6 +28,7 @@ async def search_web(query: str, max_results: int = 5) -> str:
 
             return "\n\n".join(results) if results else "No search results found."
 
+        except httpx.HTTPError:
             return "Search unavailable."
 
 

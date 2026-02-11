@@ -254,6 +254,8 @@ class SocratesApp(App):
                     classes="subtitle-label",
                 )
                 yield TextArea(id="task-input")
+                yield Label("📄 Context File (optional):")
+                yield Input(id="file-input", placeholder="/path/to/file.txt")
                 yield Rule()
                 with Horizontal(id="controls"):
                     yield Label("Iterations:")
@@ -291,14 +293,27 @@ class SocratesApp(App):
     def _start_run(self):
         task_area = self.query_one("#task-input", TextArea)
         task_text = task_area.text.strip()
+        file_path_input = self.query_one("#file-input", Input).value.strip()
 
         if not task_text:
             self.notify("Please enter a task first!", severity="error")
             return
 
-        # Check if task is a file path
+        # Check if task is a file path (legacy support)
         if os.path.isfile(task_text):
             task_text = Path(task_text).read_text().strip()
+
+        # Validate file input
+        file_path = None
+        if file_path_input:
+            if os.path.isfile(file_path_input):
+                file_path = file_path_input
+            else:
+                self.notify(f"File not found: {file_path_input}", severity="warning")
+                # Proceed anyway without file? Or return? Let's proceed but warn.
+                # Actually, better to just let the agent handle "No file" or passing None
+                # or clearer: if invalid file, don't pass it.
+                file_path = None
 
         try:
             iters = int(self.query_one("#iter-input", Input).value)
@@ -325,10 +340,10 @@ class SocratesApp(App):
         self.query_one("#status-line").update("⏳ Starting agent loop...")
         self.query_one("#done-banner").styles.display = "none"
 
-        self._run_agents(task_text, output_dir, iters)
+        self._run_agents(task_text, output_dir, iters, file_path)
 
     @work(thread=False)
-    async def _run_agents(self, task: str, output_dir: str, iterations: int):
+    async def _run_agents(self, task: str, output_dir: str, iterations: int, file_path: str | None):
         from graph import run_task
 
         async def on_event(event_type: str, data: dict):
@@ -409,6 +424,7 @@ class SocratesApp(App):
                 task=task,
                 output_dir=output_dir,
                 iterations=iterations,
+                file_path=file_path,
                 on_event=on_event,
             )
         except Exception as e:

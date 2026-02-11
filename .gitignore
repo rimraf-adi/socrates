@@ -11,6 +11,7 @@ out/
 dist/
 build/
 *.egg-info/
+socrates.spec
 
 # Environment files
 .env
