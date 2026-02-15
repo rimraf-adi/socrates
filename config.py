@@ -11,10 +11,12 @@ MAX_INPUT_CHARS = 28000
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 GROQ_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "mixtral-8x7b-32768",
-    "gemma2-9b-it",
+    "meta-llama/llama-4-scout-17b-16e-instruct",   # 30K TPM, 1K RPD
+    "llama-3.1-8b-instant",                          # 6K TPM, 14.4K RPD (fastest)
+    "qwen/qwen3-32b",                                # 6K TPM, 60 RPM
+    "llama-3.3-70b-versatile",                        # 12K TPM, 1K RPD (strongest)
+    "meta-llama/llama-4-maverick-17b-128e-instruct",  # 6K TPM, 1K RPD
+    "moonshotai/kimi-k2-instruct",                    # 10K TPM, 60 RPM
 ]
 
 # Round-robin iterator over Groq models to avoid rate limits
