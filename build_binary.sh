@@ -22,6 +22,7 @@ uv run pyinstaller --onefile --name socrates --clean \
     --hidden-import langchain_core \
     --hidden-import langchain_openai \
     --hidden-import langgraph \
+    --hidden-import langchain_groq \
     --hidden-import tui \
     --hidden-import graph \
     --hidden-import generator \

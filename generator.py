@@ -21,14 +21,21 @@ You have access to the following tools:
    - Use this to inspect the file content provided in the task.
 
 FORMAT INSTRUCTIONS:
-To use a tool, you MUST use this format:
+To use a tool, you MUST use EXACTLY this format on a SINGLE LINE:
 
 Thought: ... reasoning about what to do next ...
 Action: tool_name(arg1="value", arg2=123)
-Observation: ... (this will be filled by the system)
+
+The system will respond with:
+Observation: ... result ...
 
 When you have enough information, provide your final answer:
 Final Answer: ... your detailed response ...
+
+IMPORTANT:
+- Put each Action on its OWN line.
+- Do NOT split an Action across multiple lines.
+- Always wrap string arguments in quotes.
 """
 
 TASK_PROMPT = """
@@ -40,12 +47,68 @@ File Path: {file_path_info}
 Begin!
 """
 
+
+def _parse_action(text: str):
+    """Parse the LAST Action: line from model output. Returns (tool_name, args_str) or None."""
+    # Match single-line Action: calls only (re.MULTILINE makes ^ match line starts)
+    matches = re.findall(r'^Action:\s*(\w+)\((.+)\)\s*$', text, re.MULTILINE)
+    if matches:
+        return matches[-1]  # Take the last action if multiple
+    return None
+
+
+def _parse_search_args(args_str: str) -> str | None:
+    """Extract query string from search_web args."""
+    # Try query="..." or query='...'
+    match = re.search(r'query\s*=\s*["\'](.+?)["\']', args_str)
+    if match:
+        return match.group(1)
+    # Try positional: "..."
+    match = re.search(r'["\'](.+?)["\']', args_str)
+    if match:
+        return match.group(1)
+    # Try bare string (no quotes) — last resort
+    stripped = args_str.strip().strip('"').strip("'")
+    if stripped:
+        return stripped
+    return None
+
+
+def _parse_read_file_args(args_str: str) -> tuple[str | None, int | None, int | None]:
+    """Extract file_path, start_line, end_line from read_file args."""
+    file_path = None
+    start_line = None
+    end_line = None
+
+    # Extract file_path
+    match = re.search(r'file_path\s*=\s*["\'](.+?)["\']', args_str)
+    if match:
+        file_path = match.group(1)
+    else:
+        # Positional: first quoted string
+        match = re.search(r'["\'](.+?)["\']', args_str)
+        if match:
+            file_path = match.group(1)
+
+    # Extract start_line
+    match = re.search(r'start_line\s*=\s*(\d+)', args_str)
+    if match:
+        start_line = int(match.group(1))
+
+    # Extract end_line
+    match = re.search(r'end_line\s*=\s*(\d+)', args_str)
+    if match:
+        end_line = int(match.group(1))
+
+    return file_path, start_line, end_line
+
+
 async def generate(state: AgentState) -> dict:
     llm = get_llm(temperature=0.7)
     iteration = state["iteration"]
     task = state["task"]
     file_path = state.get("file_path", None)
-    
+
     file_path_info = file_path if file_path else "No file provided."
 
     feedback_section = ""
@@ -57,7 +120,10 @@ Previous Response:
 Critic's Feedback:
 {truncate(state['feedback'], 4000)}
 
-Refine your previous response based on the feedback.
+You MUST address every point in the critic's feedback.
+Expand sections the critic flagged as incomplete.
+Add new content the critic demanded.
+Do NOT just rephrase — add real substance.
 """
 
     messages = [
@@ -68,147 +134,74 @@ Refine your previous response based on the feedback.
             feedback_section=feedback_section
         ))
     ]
-    
+
     # ReAct Loop
-    max_steps = 5
-    current_search_context = [] # Track what we found for the logs
-    
-    # Initial thought
+    max_steps = 8
+    current_search_context = []
+
     response_text = ""
-    
+
     for step in range(max_steps):
-        # Call LLM
-        # We need to construct the full string history because ChatOpenAI generic usage 
-        # is easier with a single prompt if we are manually doing ReAct, 
-        # but let's try maintaining the messages list for chat models.
-        
-        # Determine strictness? LMStudio models vary.
-        # Let's just create a string prompt from messages for simplicity if needed,
-        # or pass the messages list if supported. 
-        # LangChain's ChatOpenAI handles checking.
-        
-        # Actually, let's keep it simple: Append to prompt string.
         prompt_str = "\n".join([m[1] for m in messages])
-        
+
         response = await llm.ainvoke(prompt_str)
         content = response.content
-        
+
         messages.append(("assistant", content))
         response_text = content
-        
-        # Parse for Action
-        # Regex to find: Action: tool_name(args)
-        # We look for the LAST action in the block if multiple (rare).
-        action_match = re.search(r"Action:\s*(\w+)\((.*)\)", content, re.DOTALL)
-        
+
+        # Check for Final Answer first
         if "Final Answer:" in content:
-            # We are done. extracting final answer.
             final_ans = content.split("Final Answer:")[-1].strip()
             return {
                 "current_response": final_ans,
                 "search_context": "\n".join(current_search_context),
                 "status": "generated",
             }
-        
-        if not action_match:
-            # No action, no final answer? 
-            # If the model just talks without following format, we treat it as final answer if it looks substantial,
-            # or we prompt it to format.
-            # For now, let's assume it IS the answer if it's long, or force it.
+
+        # Parse for Action using line-anchored regex
+        action = _parse_action(content)
+
+        if not action:
+            # No action and no final answer
             if len(content) > 200:
-                 return {
+                return {
                     "current_response": content,
                     "search_context": "\n".join(current_search_context),
                     "status": "generated",
                 }
             else:
-                 messages.append(("user", "Please continue. If finished, say 'Final Answer:'."))
-                 continue
+                messages.append(("user", "Please continue. Use 'Action: tool_name(...)' to use a tool, or 'Final Answer: ...' to give your response."))
+                continue
 
-        # Execute Tool
-        tool_name = action_match.group(1).strip()
-        args_str = action_match.group(2).strip()
-        
-        observation = f"Error: Tool {tool_name} not found."
-        
+        tool_name, args_str = action
+        observation = f"Error: Tool '{tool_name}' not found. Available tools: search_web, read_file"
+
         try:
-            # Parse args - simple heuristic or eval (careful!)
-            # We'll try to parse key=value or just positional if simple.
-            # Using eval is risky but for a local agent tool it's effective for parsing python-like args args_str
-            # We will use valid python eval but capture errors.
-            # Security risk? It's a local agent running user code.
-            # Let's try to be safer: simplistic parsing.
-            
-            # Reconstruct args:
-            # tool(query="foo") -> query="foo"
-            
-            # Let's just use `eval`.
-            # Restrict globals/locals for safety.
-            allowed_names = {"True": True, "False": False, "None": None}
-            
-            # Simple check
             if tool_name == "search_web":
-                # regex extract query
-                # pattern: query="(.*)" or query='(.*)' or just the string?
-                # Let's assume the LLM follows `search_web(query="...")`
-                match = re.search(r'query=["\'](.*?)["\']', args_str)
-                if match:
-                    q = match.group(1)
-                    res = await search_web(q)
+                query = _parse_search_args(args_str)
+                if query:
+                    res = await search_web(query)
                     observation = f"Search Results:\n{truncate(res, 2000)}"
-                    current_search_context.append(f"Query: {q}\n{res}")
+                    current_search_context.append(f"Query: {query}\n{res}")
                 else:
-                    # try positional: search_web("...")
-                    match = re.search(r'["\'](.*?)["\']', args_str)
-                    if match:
-                        q = match.group(1)
-                        res = await search_web(q)
-                        observation = f"Search Results:\n{truncate(res, 2000)}"
-                        current_search_context.append(f"Query: {q}\n{res}")
-                    else:
-                        observation = "Error processsing arguments. Usage: search_web(query='...')"
+                    observation = "Error: Could not parse query. Usage: search_web(query=\"your search query\")"
 
             elif tool_name == "read_file":
-                # usage: read_file(file_path="...", start_line=1, end_line=10)
-                # Parse args using eval in a controlled env because parsing int/str is annoying with regex
-                # We trust the local LLM outputs for this prototype
-                
-                # Mock function to capture args
-                def _mock_read(file_path, start_line=None, end_line=None):
-                    return read_file(file_path, start_line, end_line)
-                
-                try:
-                    # We wrap the call in a lambda to eval it
-                    # "read_file(...)" is the string.
-                    # We need to eval `_mock_read(...)`
-                    # Reconstruct the string to use our local function name
-                   
-                    # This is tricky because `tool_name` is "read_file".
-                    # We can map it.
-                    
-                    local_tools = {
-                        "read_file": _mock_read,
-                        "search_web": None # Handled above
-                    }
-                    
-                    # Construct expression
-                    expr = f"{tool_name}({args_str})"
-                    
-                    if tool_name == "read_file":
-                         # Disable builtins for safety
-                        observation = eval(expr, {"__builtins__": {}}, local_tools)
-                        observation = f"File Content:\n{truncate(observation, 3000)}"
-                    
-                except Exception as e:
-                    observation = f"Error executing read_file: {e}"
+                fp, sl, el = _parse_read_file_args(args_str)
+                if fp:
+                    result = read_file(fp, sl, el)
+                    observation = f"File Content:\n{truncate(result, 3000)}"
+                else:
+                    observation = "Error: Could not parse file_path. Usage: read_file(file_path=\"/path/to/file\", start_line=1, end_line=100)"
 
         except Exception as e:
-            observation = f"Error parsing action: {e}"
+            observation = f"Error executing {tool_name}: {e}"
 
         # Feed back observation
         messages.append(("user", f"Observation: {observation}"))
-        
-    # If partial response, return it
+
+    # If we exhausted steps, return whatever we have
     return {
         "current_response": response_text,
         "search_context": "\n".join(current_search_context),

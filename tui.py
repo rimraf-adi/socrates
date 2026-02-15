@@ -9,6 +9,7 @@ import asyncio
 import os
 from pathlib import Path
 
+import httpx
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -25,7 +26,11 @@ from textual.widgets import (
     Markdown,
     Label,
     Rule,
+    Select,
+    Switch,
 )
+
+from config import set_backend, get_backend, SEARXNG_BASE_URL
 
 
 # ─── Styled Widgets ──────────────────────────────────────────────────────────
@@ -138,6 +143,11 @@ class SocratesApp(App):
         margin: 0 1;
     }
 
+    #backend-select {
+        width: 18;
+        margin: 0 1;
+    }
+
     #run-btn {
         margin-left: 2;
         min-width: 16;
@@ -241,6 +251,7 @@ class SocratesApp(App):
     current_iteration: reactive[int] = reactive(0)
     max_iterations: reactive[int] = reactive(3)
     is_running: reactive[bool] = reactive(False)
+    searxng_available: bool = False
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -262,6 +273,13 @@ class SocratesApp(App):
                     yield Input(value="3", id="iter-input", type="integer")
                     yield Label("Output:")
                     yield Input(value="./output", id="output-input")
+                    yield Label("Backend:")
+                    yield Select(
+                        [("Groq", "groq"), ("LMStudio", "lmstudio")],
+                        value="groq",
+                        id="backend-select",
+                        allow_blank=False,
+                    )
                     yield Button("▶  Run", id="run-btn", variant="success")
 
         # ── Run Screen ──
@@ -279,6 +297,29 @@ class SocratesApp(App):
 
     def on_mount(self):
         self.query_one("#task-input", TextArea).focus()
+        self._check_searxng()
+
+    @work(thread=False)
+    async def _check_searxng(self):
+        """Check if SearxNG is reachable on startup."""
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"{SEARXNG_BASE_URL}/healthz", timeout=3.0)
+                if resp.status_code == 200:
+                    self.searxng_available = True
+                    self.notify("🔍 SearxNG is reachable — web search enabled.", severity="information")
+                else:
+                    self.searxng_available = False
+                    self.notify(
+                        f"⚠️ SearxNG returned {resp.status_code}. Web search will be unavailable.",
+                        severity="warning",
+                    )
+        except Exception:
+            self.searxng_available = False
+            self.notify(
+                "⚠️ SearxNG is not reachable. The agent will run without web search.",
+                severity="warning",
+            )
 
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "run-btn" and not self.is_running:
@@ -299,6 +340,21 @@ class SocratesApp(App):
             self.notify("Please enter a task first!", severity="error")
             return
 
+        # Set backend from select dropdown
+        try:
+            backend_val = self.query_one("#backend-select", Select).value
+            set_backend(str(backend_val) if backend_val else "groq")
+        except Exception:
+            set_backend("groq")
+
+        # Warn about SearxNG if unreachable
+        if not self.searxng_available:
+            self.notify(
+                "⚠️ Running without web search (SearxNG unavailable). "
+                "The agent will use its training data only.",
+                severity="warning",
+            )
+
         # Check if task is a file path (legacy support)
         if os.path.isfile(task_text):
             task_text = Path(task_text).read_text().strip()
@@ -310,9 +366,6 @@ class SocratesApp(App):
                 file_path = file_path_input
             else:
                 self.notify(f"File not found: {file_path_input}", severity="warning")
-                # Proceed anyway without file? Or return? Let's proceed but warn.
-                # Actually, better to just let the agent handle "No file" or passing None
-                # or clearer: if invalid file, don't pass it.
                 file_path = None
 
         try:
@@ -333,11 +386,15 @@ class SocratesApp(App):
         self.query_one("#run-screen").styles.display = "block"
 
         # Reset panels
-        self.query_one("#socrates-panel", AgentPanel).update_content("*Waiting for first generation...*")
+        backend_label = get_backend().upper()
+        search_status = "🔍" if self.searxng_available else "⚠️ no search"
+        self.query_one("#socrates-panel", AgentPanel).update_content(
+            f"*Waiting for first generation... ({backend_label} · {search_status})*"
+        )
         self.query_one("#plato-panel", AgentPanel).update_content("*Waiting for critique...*")
         self.query_one("#progress-bar", ProgressBar).update(total=iters, progress=0)
         self.query_one("#progress-label").update(f"● Iteration 0 / {iters}")
-        self.query_one("#status-line").update("⏳ Starting agent loop...")
+        self.query_one("#status-line").update(f"⏳ Starting agent loop... [{backend_label}]")
         self.query_one("#done-banner").styles.display = "none"
 
         self._run_agents(task_text, output_dir, iters, file_path)
